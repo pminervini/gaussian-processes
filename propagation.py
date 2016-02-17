@@ -16,7 +16,7 @@ __author__ = 'pminervini'
 __copyright__ = 'INSIGHT Centre for Data Analytics 2016'
 
 
-def likelihood(f, l, R, mu, eps, sigma2, lambda_1=1e-6):
+def likelihood(f, l, R, mu, eps, sigma2, lambda_1=1e-4):
     # The similarity matrix W is a linear combination of the slices in R
     W = T.tensordot(R, mu, axes=1)
 
@@ -99,6 +99,9 @@ def main(argv):
     propagation_function = theano.function([f, l, R, mu, eps], f_star, on_unused_input='warn')
     likelihood_function = theano.function([f, l, R, mu, eps, sigma2], ll, on_unused_input='warn')
 
+    ll_grad = T.grad(ll, [mu, eps, sigma2])
+    likelihood_gradient_function = theano.function([f, l, R, mu, eps, sigma2], ll_grad, on_unused_input='warn')
+
     nb_nodes = 64
 
     R = np.zeros((nb_nodes, nb_nodes, 1))
@@ -109,13 +112,29 @@ def main(argv):
         R[source, target, 0], R[target, source, 0] = 1.0, 1.0
 
     mu = np.ones(1)
+    eps = 1e-2
+    sigma2 = 1e-6
 
     f = np.array([+ 1.0, - 1.0] + ([.0] * (nb_nodes - 2)))
     l = np.array(f != 0, dtype='int8')
 
-    print(propagation_function(f, l, R, mu, eps=1e-2))
-    print(likelihood_function(f, l, R, mu, eps=1e-2, sigma2=1e-6))
+    print(propagation_function(f, l, R, mu, eps))
 
+    learning_rate = 1e-2
+
+    for i in range(1024):
+        ll_value = likelihood_function(f, l, R, mu, eps, sigma2)
+        print('LL [%d]: %s' % (i, ll_value))
+
+        grad_value = likelihood_gradient_function(f, l, R, mu, eps, sigma2)
+
+        mu += learning_rate * grad_value[0]
+        eps += max(1e-6, learning_rate * grad_value[1])
+        sigma2 += max(1e-6, learning_rate * grad_value[2])
+
+    print('Mu: %s' % str(mu))
+    print('Eps: %s' % str(eps))
+    print('Sigma^2: %s' % str(sigma2))
 
 
 if __name__ == '__main__':

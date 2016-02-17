@@ -16,6 +16,43 @@ __author__ = 'pminervini'
 __copyright__ = 'INSIGHT Centre for Data Analytics 2016'
 
 
+def likelihood(f, l, R, mu, eps, sigma2, lambda_1=1e-6):
+    # The similarity matrix W is a linear combination of the slices in R
+    W = T.tensordot(R, mu, axes=1)
+
+    # The following indices correspond to labeled and unlabeled examples
+    labeled = T.eq(l, 1).nonzero()
+
+    # Calculating the graph Laplacian of W
+    D = T.diag(W.sum(axis=0))
+    L = D - W
+
+    # The Covariance (or Kernel) matrix is the inverse of the (regularized) Laplacian
+    epsI = eps * T.eye(L.shape[0])
+    rL = L + epsI
+    Sigma = nlinalg.matrix_inverse(rL)
+
+    # The marginal density of labeled examples uses Sigma_LL as covariance (sub-)matrix
+    Sigma_LL = Sigma[labeled][:, labeled][:, 0, :]
+
+    # We also consider additive Gaussian noise with variance sigma2
+    K_L = Sigma_LL + (sigma2 * T.eye(Sigma_LL.shape[0]))
+
+    # Calculating the inverse and the determinant of K_L
+    iK_L = nlinalg.matrix_inverse(K_L)
+    dK_L = nlinalg.det(K_L)
+
+    f_L = f[labeled]
+
+    # The (L1-regularized) log-likelihood is given by the summation of the following four terms
+    term_A = - (1 / 2) * f_L.dot(iK_L.dot(f_L))
+    term_B = - (1 / 2) * T.log(dK_L)
+    term_C = - (1 / 2) * T.log(2 * np.pi)
+    term_D = - lambda_1 * T.sum(abs(mu))
+
+    return term_A + term_B + term_C + term_D
+
+
 def propagation(f, l, R, mu, eps):
     # The similarity matrix W is a linear combination of the slices in R
     W = T.tensordot(R, mu, axes=1)
@@ -31,9 +68,10 @@ def propagation(f, l, R, mu, eps):
     # Computing L_UU (the Laplacian over unlabeled examples)
     L_UU = L[unlabeled][:, unlabeled][:, 0, :]
 
-    # Computing iA = (L_UU + epsI)^-1
+    # Computing the inverse of the (regularized) Laplacian iA = (L_UU + epsI)^-1
     epsI = eps * T.eye(L_UU.shape[0])
-    iA = nlinalg.matrix_inverse(L_UU + epsI)
+    rL_UU = L_UU + epsI
+    iA = nlinalg.matrix_inverse(rL_UU)
 
     # Computing W_UL (the similarity matrix between unlabeled and labeled examples)
     W_UL = W[unlabeled][:, labeled][:, 0, :]
@@ -50,11 +88,16 @@ def main(argv):
 
     # Training labels, similarity matrix and weight of the regularization term
     f, R, mu, eps = T.dvector('f'), T.dtensor3('R'), T.dvector('mu'), T.dscalar('eps')
+    sigma2 = T.dscalar('sigma2')
+
     # Indices of labeled examples
     l = T.ivector('l')
 
     f_star = propagation(f, l, R, mu, eps)
+    ll = likelihood(f, l, R, mu, eps, sigma2)
+
     propagation_function = theano.function([f, l, R, mu, eps], f_star, on_unused_input='warn')
+    likelihood_function = theano.function([f, l, R, mu, eps, sigma2], ll, on_unused_input='warn')
 
     nb_nodes = 64
 
@@ -67,10 +110,12 @@ def main(argv):
 
     mu = np.ones(1)
 
-    f = np.array([+ 1.0, -1.0] + ([.0] * (nb_nodes - 2)))
+    f = np.array([+ 1.0, - 1.0] + ([.0] * (nb_nodes - 2)))
     l = np.array(f != 0, dtype='int8')
 
-    print(propagation_function(f, l, R, mu, 1e-2))
+    print(propagation_function(f, l, R, mu, eps=1e-2))
+    print(likelihood_function(f, l, R, mu, eps=1e-2, sigma2=1e-6))
+
 
 
 if __name__ == '__main__':

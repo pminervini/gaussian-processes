@@ -77,6 +77,7 @@ def propagation(f, l, R, mu, eps):
     W_UL = W[unlabeled][:, labeled][:, 0, :]
     f_L = f[labeled]
 
+    # f* = (L_UU + epsI)^-1 W_UL f_L
     f_star = iA.dot(W_UL.dot(f_L))
 
     return f_star
@@ -119,6 +120,8 @@ def main(argv):
     l = np.array(f != 0, dtype='int8')
 
     print(propagation_function(f, l, R, mu, eps))
+
+    sys.exit(0)
 
     learning_rate = 1e-2
 

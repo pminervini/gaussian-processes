@@ -53,7 +53,7 @@ def likelihood(f, l, R, mu, eps, sigma2, lambda_1=1e-4):
     return term_A + term_B + term_C + term_D
 
 
-def propagation(f, l, R, mu, eps):
+def propagate(f, l, R, mu, eps):
     # The similarity matrix W is a linear combination of the slices in R
     W = T.tensordot(R, mu, axes=1)
 
@@ -94,10 +94,10 @@ def main(argv):
     # Indices of labeled examples
     l = T.ivector('l')
 
-    f_star = propagation(f, l, R, mu, eps)
+    f_star = propagate(f, l, R, mu, eps)
     ll = likelihood(f, l, R, mu, eps, sigma2)
 
-    propagation_function = theano.function([f, l, R, mu, eps], f_star, on_unused_input='warn')
+    propagate_f = theano.function([f, l, R, mu, eps], f_star, on_unused_input='warn')
     likelihood_function = theano.function([f, l, R, mu, eps, sigma2], ll, on_unused_input='warn')
 
     ll_grad = T.grad(ll, [mu, eps, sigma2])
@@ -119,9 +119,7 @@ def main(argv):
     f = np.array([+ 1.0, - 1.0] + ([.0] * (nb_nodes - 2)))
     l = np.array(f != 0, dtype='int8')
 
-    print(propagation_function(f, l, R, mu, eps))
-
-    sys.exit(0)
+    print(propagate_f(f, l, R, mu, eps))
 
     learning_rate = 1e-2
 
